@@ -1,0 +1,45 @@
+name:           mcl
+version:        0.1
+cabal-version:  >= 1.8
+build-type:     Simple
+license:        GPL-3
+license-file:   LICENSE
+maintainer:     Edgar Gomes de Araujo
+stability:      experimental
+homepage:
+package-url:
+bug-reports:    talktoedgar@gmail.com
+synopsis:       Markov Cluster Algorithm
+description:    Markov Cluster Algorithm, a fast and scalable unsupervised cluster algorithm for graphs
+category:       Math
+author:         Edgar Gomes de Araujo
+
+Library
+  build-depends:  base                    == 4.*
+                , containers              >= 0.4.2.1
+                , unordered-containers    >= 0.2
+                , hashable                >= 1.2
+                , vector                  >= 0.10
+                , vector-algorithms       >= 0.5
+                , random                  >= 1.0
+                , parallel                >= 3.0
+                , deepseq                 >= 1.2
+
+  exposed-modules:
+                    Data.Graph.Markov
+                    Data.Graph.Sparse
+  other-modules:
+                    Data.Graph
+
+  exposed:        True
+  buildable:      True
+  hs-source-dirs: src
+  ghc-options:    -O2
+                  -rtsopts
+                  -Wall
+                  -funbox-strict-fields
+                  -threaded
+                  -fprof-auto
+                  -- -eventlog
+                  -auto-all
+                  -caf-all
