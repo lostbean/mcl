@@ -1,15 +1,21 @@
-{-# LANGUAGE BangPatterns    #-}
-{-# LANGUAGE RecordWildCards #-}
+{-# LANGUAGE
+    BangPatterns
+  , RecordWildCards
+  #-}
 
 module Data.Graph.Markov
-       ( MCLCfg  (..)
-       , Pruning (..)
-       , defaultMCL
-       , runMCL
-       , module Data.Graph
-       ) where
+  ( MCLCfg   (..)
+  , Progress (..)
+  , Pruning  (..)
+  , defaultMCL
+  , runMCL
+  , runMCLWithProgress
+  , module Data.Graph
+  ) where
 
+import Control.Concurrent.MVar
 import Control.DeepSeq
+import Control.Monad
 import Debug.Trace
 import qualified Data.HashMap.Strict as HM
 import qualified Data.Vector.Generic as G
@@ -28,32 +34,63 @@ data Pruning
 
 data MCLCfg
   = MCLCfg
-  { inflation :: Double
-  , pruneMode :: Pruning
-  , maxIter   :: Int
-  , minError  :: Double
-  , selfLoop  :: Double
+  { inflation      :: Double
+  , pruneMode      :: Pruning
+  , maxIter        :: Int
+  , minError       :: Double
+  , selfLoop       :: Double
+  , reportProgress :: Progress -> IO ()
+  }
+
+data Progress
+  = Progress
+  { currentError :: Double
+  , currentIter  :: Int
   } deriving (Show)
 
 -- | Default MCL configuration
 defaultMCL :: MCLCfg
 defaultMCL = MCLCfg
-  { inflation = 1.2
-  , pruneMode = FixPrune 0.0001
-  , maxIter   = 200
-  , minError  = 0.0001
-  , selfLoop  = 0 }
+  { inflation      = 1.2
+  , pruneMode      = FixPrune 0.0001
+  , maxIter        = 200
+  , minError       = 0.0001
+  , selfLoop       = 0
+  , reportProgress = const $ return ()
+  }
+
+-- | Graph clustering using the MCL algorithm.
+runMCLWithProgress :: MCLCfg -> Graph Int Double -> IO [[Int]]
+runMCLWithProgress cfg@MCLCfg{..}
+  = fmap getMClClusters
+  . run 0
+  . normalizeCRS
+  . graphToCRS
+  . addSelfNodes selfLoop
+  where
+    run :: Int -> CRS Double -> IO (CRS Double)
+    run !n !x
+      | n     >= maxIter  = return m
+      | chaos <  minError = return m
+      | otherwise         = reportProgress (Progress chaos n) >> run (n + 1) m
+      where
+        m     = x `deepseq` stepMCL cfg x
+        chaos = getChaos m
 
 -- | Graph clustering using the MCL algorithm.
 runMCL :: MCLCfg -> Graph Int Double -> [[Int]]
-runMCL c@MCLCfg{..} = getMClClusters . run maxIter .normalizeCRS .
-                      graphToCRS . addSelfNodes selfLoop
+runMCL c@MCLCfg{..}
+  = getMClClusters
+  . run 0
+  . normalizeCRS
+  . graphToCRS
+  . addSelfNodes selfLoop
   where
     run :: Int -> CRS Double -> CRS Double
     run !n !x
-      | n   < 0          = m
-      | chaos < minError = m
-      | otherwise        = trace (show (n, chaos)) $ run (n-1) m
+      | n     >= maxIter  = m
+      | chaos <  minError = m
+      | otherwise         = run (n + 1) m
       where
         m     = x `deepseq` stepMCL c x
         chaos = getChaos m
@@ -61,7 +98,7 @@ runMCL c@MCLCfg{..} = getMClClusters . run maxIter .normalizeCRS .
 -- | Add self loop for values larger than zero.
 addSelfNodes :: Double -> Graph Int Double -> Graph Int Double
 addSelfNodes loop g@Graph{..}
-  | loop > 0  = Graph $ HM.unionWith (HM.union) graph graph2
+  | loop > 0  = Graph $ HM.unionWith HM.union graph graph2
   | otherwise = g
   where
     es = map (\x -> ((x, x), loop)) ns
@@ -165,7 +202,7 @@ getPruningStat :: VecS Double -> (Double, Double, Double)
 getPruningStat vec = (mi, avg, ma)
   where
     v      = vecS vec
-    avg    = s / (fromIntegral $ G.length v)
+    avg    = s / fromIntegral (G.length v)
     (s, mi, ma) = G.foldl' func (0, 1, 0) v
     func (!acc, !k, !t) (_, x) = (acc + x, min x k, max x t)
 
@@ -175,7 +212,7 @@ getAvgCut vec c
   | ncut > 0  = (avg, sumcut, ncut)
   | otherwise = (0, 0, 0)
   where
-    avg = sumcut / (fromIntegral $ ncut)
+    avg = sumcut / fromIntegral ncut
     (sumcut, ncut) = G.foldl' func (0, 0 :: Int) (vecS vec)
     func acc@(!s, !n) (_, x)
       | x <= c    = (s+x, n+1)
