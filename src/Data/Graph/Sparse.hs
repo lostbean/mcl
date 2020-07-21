@@ -26,7 +26,7 @@ import Control.Monad.ST
 import Control.Parallel.Strategies
 import Data.Function
 import Data.Vector.Unboxed (Vector)
-import GHC.Conc
+import GHC.Conc            (numCapabilities)
 import qualified Data.HashMap.Strict          as HM
 import qualified Data.Vector                  as V
 import qualified Data.Vector.Mutable          as MV
@@ -135,7 +135,7 @@ multMV CRS{..} v = VecS . U.convert $ V.imap func crs
 
 -- | Sparse matrix (row based) multiplication.
 multMM :: CRS Double -> CRS Double -> CRS Double
-multMM m1 m2 = CRS $ using (G.map func (crs m1)) parVector
+multMM m1 m2 = CRS $ using (G.map func (crs m1)) autoParVector
   where
     cols = crs $ transpose m2
     func row1 = VecS $ foo cols
@@ -145,7 +145,7 @@ multMM m1 m2 = CRS $ using (G.map func (crs m1)) parVector
 
 -- | Sparse matrix (row based) multiplication.
 multMMsmrt :: CRS Double -> CRS Double -> CRS Double
-multMMsmrt m1 m2 = CRS $ using (G.map func (crs m1)) parVector
+multMMsmrt m1 m2 = CRS $ using (G.map func (crs m1)) autoParVector
   where func = flatter . smartRowsGetter m2
 
 -- | Super efficient sparse multiplication based on the SpGEMM algorithm as nicely explained
@@ -199,10 +199,22 @@ unsafeSort v = runST $ do
   S.sortBy (compare `on` fst) mv
   G.unsafeFreeze mv
 
--- | Parallel evaluation of a vector where the chunk size is automatic derived from the
--- ghc's RTS "-Nx".
-parVector :: NFData a => Strategy (V.Vector a)
-parVector v = return pvec
+autoParVector :: NFData a => Strategy (V.Vector a)
+autoParVector vec = parVector (V.length vec `div` (10 * numCapabilities)) vec
+
+parVector :: NFData a => Int -> Strategy (V.Vector a)
+parVector minChunk vecO = innerPar vecO >> return vecO
   where
-    n = (2 * G.length v) `div` numCapabilities
-    pvec = V.fromList $ using (V.toList v) (parListChunk n rdeepseq)
+    innerPar :: NFData a => Strategy (V.Vector a) 
+    innerPar vec
+      | vLen > minChunk = let
+        half = vLen `div` 2
+        v1 = V.unsafeSlice 0 half vec
+        v2 = V.unsafeSlice half (vLen - half) vec
+        in do
+          _ <- innerPar v1
+          _ <- innerPar v2
+          return vec
+      | otherwise = rparWith (evalTraversable rdeepseq) $ vec 
+      where
+        vLen = V.length vec

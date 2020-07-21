@@ -35,11 +35,6 @@ Library
   buildable:      True
   hs-source-dirs: src
   ghc-options:    -O2
-                  -rtsopts
                   -Wall
                   -funbox-strict-fields
-                  -threaded
                   -fprof-auto
-                  -- -eventlog
-                  -auto-all
-                  -caf-all
