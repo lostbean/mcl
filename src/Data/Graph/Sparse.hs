@@ -135,7 +135,7 @@ multMV CRS{..} v = VecS . U.convert $ V.imap func crs
 
 -- | Sparse matrix (row based) multiplication.
 multMM :: CRS Double -> CRS Double -> CRS Double
-multMM m1 m2 = CRS $ using (G.map func (crs m1)) autoParVector
+multMM m1 m2 = CRS $ autoChunkStrategy (G.map func) (crs m1)
   where
     cols = crs $ transpose m2
     func row1 = VecS $ foo cols
@@ -145,7 +145,7 @@ multMM m1 m2 = CRS $ using (G.map func (crs m1)) autoParVector
 
 -- | Sparse matrix (row based) multiplication.
 multMMsmrt :: CRS Double -> CRS Double -> CRS Double
-multMMsmrt m1 m2 = CRS $ using (G.map func (crs m1)) autoParVector
+multMMsmrt m1 m2 = CRS $ autoChunkStrategy (G.map func) (crs m1)
   where func = flatter . smartRowsGetter m2
 
 -- | Super efficient sparse multiplication based on the SpGEMM algorithm as nicely explained
@@ -199,22 +199,25 @@ unsafeSort v = runST $ do
   S.sortBy (compare `on` fst) mv
   G.unsafeFreeze mv
 
-autoParVector :: NFData a => Strategy (V.Vector a)
-autoParVector vec = parVector (V.length vec `div` (10 * numCapabilities)) vec
+autoChunkStrategy :: (G.Vector v a, G.Vector v b, NFData (v b)) => (v a -> v b) -> v a -> v b
+autoChunkStrategy func vec
+  | numCapabilities > 1 = parChunkStrategy func (G.length vec `div` (10 * numCapabilities)) vec
+  | otherwise           = runEval $ rseq (func vec)
 
-parVector :: NFData a => Int -> Strategy (V.Vector a)
-parVector minChunk vecO = innerPar vecO >> return vecO
+parChunkStrategy :: (G.Vector v a, G.Vector v b, NFData (v b)) => (v a -> v b) -> Int -> v a -> (v b)
+parChunkStrategy func minChunk = runEval . fmap G.concat . innerPar
   where
-    innerPar :: NFData a => Strategy (V.Vector a) 
     innerPar vec
       | vLen > minChunk = let
         half = vLen `div` 2
-        v1 = V.unsafeSlice 0 half vec
-        v2 = V.unsafeSlice half (vLen - half) vec
+        v1 = G.unsafeSlice 0 half vec
+        v2 = G.unsafeSlice half (vLen - half) vec
         in do
-          _ <- innerPar v1
-          _ <- innerPar v2
-          return vec
-      | otherwise = rparWith (evalTraversable rdeepseq) $ vec 
+          a <- innerPar v1
+          b <- innerPar v2
+          return (a ++ b)
+      | otherwise = do
+          e <- rparWith rdeepseq (func vec)
+          return [e]
       where
-        vLen = V.length vec
+        vLen = G.length vec
