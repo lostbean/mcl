@@ -23,10 +23,8 @@ module Data.Graph.Sparse
 
 import Control.DeepSeq
 import Control.Monad.ST
-import Control.Parallel.Strategies
 import Data.Function
 import Data.Vector.Unboxed (Vector)
-import GHC.Conc            (numCapabilities)
 import qualified Data.HashMap.Strict          as HM
 import qualified Data.Vector                  as V
 import qualified Data.Vector.Mutable          as MV
@@ -135,7 +133,7 @@ multMV CRS{..} v = VecS . U.convert $ V.imap func crs
 
 -- | Sparse matrix (row based) multiplication.
 multMM :: CRS Double -> CRS Double -> CRS Double
-multMM m1 m2 = CRS $ autoChunkStrategy (G.map func) (crs m1)
+multMM m1 m2 = CRS $ G.map func (crs m1)
   where
     cols = crs $ transpose m2
     func row1 = VecS $ foo cols
@@ -145,7 +143,7 @@ multMM m1 m2 = CRS $ autoChunkStrategy (G.map func) (crs m1)
 
 -- | Sparse matrix (row based) multiplication.
 multMMsmrt :: CRS Double -> CRS Double -> CRS Double
-multMMsmrt m1 m2 = CRS $ autoChunkStrategy (G.map func) (crs m1)
+multMMsmrt m1 m2 = CRS $ G.map func (crs m1)
   where func = flatter . smartRowsGetter m2
 
 -- | Super efficient sparse multiplication based on the SpGEMM algorithm as nicely explained
@@ -198,26 +196,3 @@ unsafeSort v = runST $ do
   mv <- G.unsafeThaw v
   S.sortBy (compare `on` fst) mv
   G.unsafeFreeze mv
-
-autoChunkStrategy :: (G.Vector v a, G.Vector v b, NFData (v b)) => (v a -> v b) -> v a -> v b
-autoChunkStrategy func vec
-  | numCapabilities > 1 = parChunkStrategy func (G.length vec `div` (10 * numCapabilities)) vec
-  | otherwise           = runEval $ rseq (func vec)
-
-parChunkStrategy :: (G.Vector v a, G.Vector v b, NFData (v b)) => (v a -> v b) -> Int -> v a -> (v b)
-parChunkStrategy func minChunk = runEval . fmap G.concat . innerPar
-  where
-    innerPar vec
-      | vLen > minChunk = let
-        half = vLen `div` 2
-        v1 = G.unsafeSlice 0 half vec
-        v2 = G.unsafeSlice half (vLen - half) vec
-        in do
-          a <- innerPar v1
-          b <- innerPar v2
-          return (a ++ b)
-      | otherwise = do
-          e <- rparWith rdeepseq (func vec)
-          return [e]
-      where
-        vLen = G.length vec
