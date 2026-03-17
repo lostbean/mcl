@@ -89,7 +89,9 @@ search g@Graph{..} a
         | HS.null nq = HS.insert n visited
         | otherwise = go nx nq (HS.insert n visited)
       where
-        nx = head $ HS.toList nq
+        nx = case HS.toList nq of
+            (x : _) -> x
+            [] -> error "bfs: unexpected empty queue"
         cs = HS.fromList $ HM.keys $ getChilderen g n
         nq = HS.union (HS.delete n queue) (HS.difference cs visited)
 
@@ -118,7 +120,9 @@ connComp g@Graph{..} = go ns0
         | HS.null ns = []
         | otherwise =
             let
-                x = head $ HS.toList ns
+                x = case HS.toList ns of
+                    (h : _) -> h
+                    [] -> error "connComp: unexpected empty set"
                 c = dfs g x
              in
                 c : go (HS.difference ns c)
