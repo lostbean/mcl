@@ -1,0 +1,5 @@
+pre-commit:
+  commands:
+    format:
+      glob: "*"
+      run: nix fmt {staged_files} && git add {staged_files}
