@@ -28,6 +28,10 @@
       {
         formatter = treefmtWrapper.config.build.wrapper;
 
+        checks = {
+          formatting = treefmtWrapper.config.build.check self;
+        };
+
         devShells.default = pkgs.mkShell {
           buildInputs = [
             haskellStack
@@ -35,11 +39,17 @@
             pkgs.zlib
             treefmtWrapper.config.build.wrapper
             pkgs.nixpkgs-fmt
+            pkgs.lefthook
           ];
 
           shellHook = ''
             echo "mcl Dev Environment Loaded"
             echo "GHC version: $(ghc --version)"
+            echo "Lefthook version: $(lefthook version)"
+            # Ensure lefthook is installed in the git repo
+            if [ -d .git ] && [ ! -f .git/hooks/pre-commit ]; then
+               lefthook install
+            fi
           '';
         };
       }
