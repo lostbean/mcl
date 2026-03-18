@@ -29,11 +29,33 @@ library
     , vector-algorithms     >=0.5
 
   exposed-modules:
+    Data.Graph.Base
     Data.Graph.Markov
     Data.Graph.Sparse
 
-  other-modules:   Data.Graph
+  other-modules:
   exposed:         True
   buildable:       True
   hs-source-dirs:  src
   ghc-options:     -O2 -Wall -funbox-strict-fields -fprof-auto -fprof-cafs
+
+test-suite spec
+  type:           exitcode-stdio-1.0
+  hs-source-dirs: test
+  main-is:        Spec.hs
+  other-modules:
+    Data.Graph.MarkovSpec
+    Data.Graph.SparseSpec
+    Data.GraphSpec
+
+  build-depends:
+      base
+    , containers
+    , hashable
+    , hspec
+    , mcl
+    , QuickCheck
+    , unordered-containers
+    , vector
+
+  ghc-options:    -Wall

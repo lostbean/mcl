@@ -1,7 +1,7 @@
 {-# LANGUAGE BangPatterns #-}
 {-# LANGUAGE RecordWildCards #-}
 
-module Data.Graph (
+module Data.Graph.Base (
     Graph (..),
     mkUniGraph,
     mkDiGraph,
@@ -35,20 +35,22 @@ instance (Show a, Show b) => Show (Graph a b) where
     show (Graph{..}) = show graph
 
 -- | Construct a unidirectional graph from edges.
-mkUniGraph :: (Eq a, Eq b, Hashable a, Hashable b) => [a] -> [((a, a), b)] -> Graph a b
+mkUniGraph :: (Eq a, Hashable a) => [a] -> [((a, a), b)] -> Graph a b
 mkUniGraph nodes = Graph . builder
   where
     g0 = HM.fromList $ map (flip (,) HM.empty) nodes
     addE (k, !v, !p) = HM.insertWith (HM.union) k (HM.singleton v p)
-    builder = L.foldl' (\m ((!a, !b), k) -> addE (a, b, k) $ addE (b, a, k) m) g0
+    addV m k = HM.insertWith (const id) k HM.empty m
+    builder = L.foldl' (\m ((!a, !b), k) -> addE (a, b, k) $ addE (b, a, k) $ addV (addV m a) b) g0
 
 -- | Construct a bidirectional graph from edges.
-mkDiGraph :: (Eq a, Eq b, Hashable a, Hashable b) => [a] -> [((a, a), b)] -> Graph a b
+mkDiGraph :: (Eq a, Hashable a) => [a] -> [((a, a), b)] -> Graph a b
 mkDiGraph nodes = Graph . builder
   where
     g0 = HM.fromList $ map (flip (,) HM.empty) nodes
     addE (k, !v, !p) = HM.insertWith (HM.union) k (HM.singleton v p)
-    builder = L.foldl' (\m ((!a, !b), k) -> addE (a, b, k) m) g0
+    addV m k = HM.insertWith (const id) k HM.empty m
+    builder = L.foldl' (\m ((!a, !b), k) -> addE (a, b, k) $ addV (addV m a) b) g0
 
 -- | Extracts a sub graph which contains a given set of nodes.
 getSubGraph :: (Eq a, Hashable a) => Graph a b -> [a] -> Graph a b
@@ -159,8 +161,8 @@ multGraph g1 g2 =
 invertGraph :: (Hashable a, Eq a) => Graph a b -> Graph a b
 invertGraph Graph{..} =
     let
-        g = HM.foldlWithKey' func HM.empty graph
+        g0 = HM.map (const HM.empty) graph
         foo k v = HM.singleton k v
         func acc k v = HM.unionWith (HM.union) acc (HM.map (foo k) v)
      in
-        Graph g
+        Graph $ HM.foldlWithKey' func g0 graph

@@ -37,7 +37,7 @@ import qualified Data.Vector.Unboxed as U
 import qualified Data.Vector.Unboxed.Mutable as MU
 import GHC.Conc
 
-import Data.Graph
+import Data.Graph.Base
 
 -- ================================== Sparse Vector ======================================
 
@@ -49,7 +49,7 @@ instance (NFData a) => NFData (VecS a) where
 
 -- | Constructs a sparse vectors.
 mkVecS :: [(Int, Double)] -> VecS Double
-mkVecS = VecS . unsafeSort . U.fromList
+mkVecS = VecS . unsafeSort . U.fromList . HM.toList . HM.fromListWith (+) . filter ((>= 0) . fst)
 
 {- | Unsafely constructs a sparse vectors without sorting. Therefore, sorted input is
 expected.
@@ -65,12 +65,17 @@ addVV v1 v2 = VecS $ U.reverse $ U.fromList $ go 0 0 []
     l2 = U.length $ vecS v2
     go !i1 !i2 !acc
         | i1 >= l1 && i2 >= l2 = acc
-        | k1 > k2 = go i1 (i2 + 1) ((k2, x2) : acc)
-        | k2 > k1 = go (i1 + 1) i2 ((k1, x1) : acc)
-        | otherwise = go (i1 + 1) (i2 + 1) ((k1, x1 + x2) : acc)
-      where
-        (k1, x1) = U.unsafeIndex (vecS v1) i1
-        (k2, x2) = U.unsafeIndex (vecS v2) i2
+        | i1 >= l1 = go i1 (i2 + 1) ((U.unsafeIndex (vecS v2) i2) : acc)
+        | i2 >= l2 = go (i1 + 1) i2 ((U.unsafeIndex (vecS v1) i1) : acc)
+        | otherwise =
+            let (k1, x1) = U.unsafeIndex (vecS v1) i1
+                (k2, x2) = U.unsafeIndex (vecS v2) i2
+             in if k1 > k2
+                    then go i1 (i2 + 1) ((k2, x2) : acc)
+                    else
+                        if k2 > k1
+                            then go (i1 + 1) i2 ((k1, x1) : acc)
+                            else go (i1 + 1) (i2 + 1) ((k1, x1 + x2) : acc)
 {-# NOINLINE addVV #-}
 
 -- | Sparse vector inner product (dot product).
@@ -80,14 +85,16 @@ multVV v1 v2 = go 0 0 0
     l1 = U.length $ vecS v1
     l2 = U.length $ vecS v2
     go !i1 !i2 !acc
-        | i1 >= l1 = acc
-        | i2 >= l2 = acc
-        | k1 > k2 = acc `deepseq` go i1 (i2 + 1) acc
-        | k2 > k1 = acc `deepseq` go (i1 + 1) i2 acc
-        | otherwise = acc `deepseq` go (i1 + 1) (i2 + 1) (acc + x1 * x2)
-      where
-        (k1, x1) = U.unsafeIndex (vecS v1) i1
-        (k2, x2) = U.unsafeIndex (vecS v2) i2
+        | i1 >= l1 || i2 >= l2 = acc
+        | otherwise =
+            let (k1, x1) = U.unsafeIndex (vecS v1) i1
+                (k2, x2) = U.unsafeIndex (vecS v2) i2
+             in if k1 > k2
+                    then go i1 (i2 + 1) acc
+                    else
+                        if k2 > k1
+                            then go (i1 + 1) i2 acc
+                            else go (i1 + 1) (i2 + 1) (acc + x1 * x2)
 {-# INLINE multVV #-}
 
 -- | Multiplies a sparse vector by a constant value.
@@ -117,13 +124,15 @@ graphToCRS = CRS . func . HM.map (mkVecS . HM.toList) . graph
             vinit G.// (HM.toList xs)
 
 crsToGraph :: CRS Double -> Graph Int Double
-crsToGraph = Graph . HM.fromList . V.toList . G.filter (HM.null . snd) . G.imap func . crs
+crsToGraph = Graph . HM.fromList . G.toList . G.filter (not . HM.null . snd) . G.imap func . crs
   where
     func i x = (i, HM.fromList $ U.toList $ vecS x)
 
 -- | Transposes a sparse matrix.
 transpose :: CRS Double -> CRS Double
-transpose CRS{..} = CRS $ V.map mkVecS mat
+transpose CRS{..}
+    | G.null crs = CRS G.empty
+    | otherwise = CRS $ V.map mkVecS mat
   where
     n :: Int
     n = G.maximum $ G.map (G.foldl' (\acc x -> max acc (fst x)) 0 . vecS) crs

@@ -6,7 +6,9 @@ module Data.Graph.Markov (
     Pruning (..),
     defaultMCL,
     runMCL,
-    module Data.Graph,
+    normalizeVecS,
+    pruneVecS,
+    module Data.Graph.Base,
 ) where
 
 import Control.DeepSeq
@@ -14,7 +16,7 @@ import qualified Data.HashMap.Strict as HM
 import qualified Data.Vector.Generic as G
 import Debug.Trace
 
-import Data.Graph
+import Data.Graph.Base
 import Data.Graph.Sparse
 
 -- ===================================== MCL =============================================
