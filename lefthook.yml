@@ -1,5 +1,6 @@
 pre-commit:
   commands:
     format:
-      glob: "*"
-      run: nix fmt {staged_files} && git add {staged_files}
+      glob: "*.{hs,nix,cabal}"
+      run: nix fmt {staged_files}
+      stage_fixed: true

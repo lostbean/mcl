@@ -1,4 +1,3 @@
-{-# LANGUAGE FlexibleInstances #-}
 {-# LANGUAGE ScopedTypeVariables #-}
 
 module Data.GraphSpec (spec) where
@@ -6,15 +5,9 @@ module Data.GraphSpec (spec) where
 import Data.Graph.Base
 import qualified Data.HashMap.Strict as HM
 import qualified Data.HashSet as HS
-import Data.Hashable (Hashable)
+import Data.TestOrphans ()
 import Test.Hspec
 import Test.QuickCheck
-
-instance (Arbitrary a, Arbitrary b, Hashable a, Eq a) => Arbitrary (Graph a b) where
-    arbitrary = do
-        nodes <- arbitrary
-        edges <- arbitrary
-        return $ mkDiGraph nodes edges
 
 spec :: Spec
 spec = do

@@ -1,4 +1,3 @@
-{-# LANGUAGE FlexibleInstances #-}
 {-# LANGUAGE ScopedTypeVariables #-}
 
 module Data.Graph.SparseSpec (spec) where
@@ -6,20 +5,10 @@ module Data.Graph.SparseSpec (spec) where
 import Data.Graph.Base
 import Data.Graph.Sparse
 import qualified Data.HashMap.Strict as HM
-import qualified Data.Vector as V
+import Data.TestOrphans ()
 import qualified Data.Vector.Unboxed as U
 import Test.Hspec
 import Test.QuickCheck
-
-instance Arbitrary (VecS Double) where
-    arbitrary = do
-        pairs <- arbitrary
-        return $ mkVecS pairs
-
-instance Arbitrary (CRS Double) where
-    arbitrary = do
-        rows <- arbitrary
-        return $ CRS $ V.fromList rows
 
 spec :: Spec
 spec = do

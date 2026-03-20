@@ -1,4 +1,3 @@
-{-# LANGUAGE FlexibleInstances #-}
 {-# LANGUAGE ScopedTypeVariables #-}
 
 module Data.Graph.MarkovSpec (spec) where
@@ -7,16 +6,10 @@ import Data.Graph.Base
 import Data.Graph.Markov
 import Data.Graph.Sparse
 import qualified Data.List as L
+import Data.TestOrphans ()
 import qualified Data.Vector.Unboxed as U
 import Test.Hspec
 import Test.QuickCheck
-
-instance Arbitrary (VecS Double) where
-    arbitrary = do
-        pairs <- arbitrary
-        -- Ensure some positive values for normalization
-        let posPairs = map (\(i, v) -> (abs i, abs v + 0.1)) pairs
-        return $ mkVecS posPairs
 
 spec :: Spec
 spec = do
@@ -61,5 +54,5 @@ spec = do
             property $
                 \(v :: VecS Double) (Positive (t :: Double)) ->
                     let v' = pruneVecS (FixPrune t) v
-                        elements = U.toList (vecS v')
-                     in all (\(_, x) -> x > t) elements
+                        elems = U.toList (vecS v')
+                     in all (\(_, x) -> x > t) elems
